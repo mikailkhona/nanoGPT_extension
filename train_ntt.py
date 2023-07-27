@@ -31,7 +31,7 @@ import pdb
 from model import GPTConfig, GPT
 import hydra
 import torchvision
-from utils import SequenceDataset, get_dataloader, dotdict
+from utils import SequenceDataset, get_dataloader, dotdict, get_cosine_warmp_lr
 
 from init import set_seed, open_log, init_wandb, cleanup
 
@@ -99,7 +99,7 @@ def main(cfg):
     # data_dir = os.path.join('data', cfg.dataset)
     # train_data = np.memmap(os.path.join(data_dir, 'train.bin'), dtype=np.uint16, mode='r')
     # val_data = np.memmap(os.path.join(data_dir, 'val.bin'), dtype=np.uint16, mode='r')
-    data_dir = './tokens.npy'
+    data_dir = cfg.dataset
     train_dataloader, val_dataloader = get_dataloader(data_dir, data_dir, cfg.block_size, cfg.batch_size, shuffle=True, num_workers=1)
 
     # test to check if code is working
@@ -214,23 +214,6 @@ def main(cfg):
         model.train()
         return out
 
-    def get_lr(it):
-        '''
-        Return lr for it'th step
-        '''
-
-        # 1) linear warmup for warmup_iters steps
-        if it < cfg.warmup_iters:
-            return cfg.learning_rate * it / cfg.warmup_iters
-        # 2) if it > lr_decay_iters, return min learning rate
-        if it > cfg.lr_decay_iters:
-            return cfg.min_lr
-        # 3) in between, use cosine decay down to min learning rate
-        decay_ratio = (it - cfg.warmup_iters) / (cfg.lr_decay_iters - cfg.warmup_iters)
-        assert 0 <= decay_ratio <= 1
-        coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff ranges 0..1
-        return cfg.min_lr + coeff * (cfg.learning_rate - cfg.min_lr)
-
     # training loop
     dataloader = iter(pick_dataloader('train')) # fetch the very first batch of X,Y
     X,Y = next(dataloader)
@@ -242,7 +225,7 @@ def main(cfg):
 
     while True:
         # determine and set the learning rate for this iteration
-        lr = get_lr(iter_num) if cfg.decay_lr else cfg.learning_rate
+        lr = get_cosine_warmp_lr(cfg.it, cfg.learning_rate, cfg.warmup_iters, cfg.lr_decay_iters, cfg.min_lr) if cfg.decay_lr else cfg.learning_rate
 
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
