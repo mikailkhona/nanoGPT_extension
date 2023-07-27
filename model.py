@@ -15,6 +15,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
+
 class LayerNorm(nn.Module):
     """ LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False """
 
@@ -200,6 +201,13 @@ class GPT(nn.Module):
         device = idx.device
         b, t = idx.size()
         assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
+        # Pad idx with empty tokens (Represented by TOKENID = 0) if its length is shorter than block_size
+        if t < self.config.block_size:
+            padding_length = self.config.block_size - t
+            padding_tokens = torch.zeros((b, padding_length), dtype=torch.long, device=device)
+            idx = torch.cat((idx, padding_tokens), dim=1)
+            t = self.config.block_size # Update t to the new length after padding
+
         pos = torch.arange(0, t, dtype=torch.long, device=device) # shape (t)
 
         # forward the GPT model itself

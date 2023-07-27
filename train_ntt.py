@@ -40,6 +40,8 @@ if torch.cuda.is_available():
 else:
     dtype = 'None'
 
+# HYDRA_FULL_ERROR=1
+
 @hydra.main(config_path="./configs", config_name="config_nanogpt_test.yaml")
 def main(cfg):
 
@@ -94,11 +96,6 @@ def main(cfg):
     ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16, 'None': torch.float32}[dtype]
     ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=device_type, dtype=ptdtype)
 
-    # poor man's data loader
-    ##### UNCOMMENT AFTER FIX
-    # data_dir = os.path.join('data', cfg.dataset)
-    # train_data = np.memmap(os.path.join(data_dir, 'train.bin'), dtype=np.uint16, mode='r')
-    # val_data = np.memmap(os.path.join(data_dir, 'val.bin'), dtype=np.uint16, mode='r')
     data_dir = cfg.dataset
     train_dataloader, val_dataloader = get_dataloader(data_dir, data_dir, cfg.block_size, cfg.batch_size, shuffle=True, num_workers=1)
 
@@ -113,28 +110,18 @@ def main(cfg):
     # init these up here, can override if init_from='resume' (i.e. from a checkpoint)
     iter_num = 0
     best_val_loss = 1e9
-
-    # attempt to derive vocab_size from the dataset
-    ##### UNCOMMENT AFTER FIX
-    # meta_path = os.path.join(data_dir, 'meta.pkl')
-    # meta_vocab_size = None
-    # if os.path.exists(meta_path):
-    #     with open(meta_path, 'rb') as f:
-    #         meta = pickle.load(f)
-    #     meta_vocab_size = meta['vocab_size']
-    #     print(f"found vocab_size = {meta_vocab_size} (inside {meta_path})")
-
+    
+    # Get the number of unique tokens in the dataset
     data = np.load(data_dir)
-    meta_vocab_size = len(set(data))
+    # add 2 (off by one error) to all tokens since 0 is reserved for padding token
+    meta_vocab_size = len(set(data)) + 2
 
     # model init
-    model_args = dict(n_layer=cfg.n_layer, n_head=cfg.n_head, n_embd=cfg.n_embd, block_size=cfg.block_size,bias=cfg.bias, vocab_size=None, dropout=cfg.dropout)
+    model_args = dict(n_layer=cfg.n_layer, n_head=cfg.n_head, n_embd=cfg.n_embd, block_size=cfg.block_size, bias=cfg.bias, vocab_size=meta_vocab_size , dropout=cfg.dropout)
                     
     if cfg.init_from == 'scratch':
         # init a new model from scratch
         print("Initializing a new model from scratch")
-        # determine the vocab size we'll use for from-scratch training
-        model_args['vocab_size'] = meta_vocab_size 
         gptconf = GPTConfig(**model_args)
         model = GPT(gptconf)
 
@@ -218,6 +205,12 @@ def main(cfg):
     # training loop
     dataloader = iter(pick_dataloader('train')) # fetch the very first batch of X,Y
     X,Y = next(dataloader)
+    if device_type == 'cuda':
+        # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
+        X, Y = X.pin_memory().to(device, non_blocking=True), Y.pin_memory().to(device, non_blocking=True)
+    else:
+        X, Y = X.to(device), Y.to(device)
+
     t0 = time.time()
     local_iter_num = 0 # number of iterations in the lifetime of this process
     raw_model = model.module if ddp else model # unwrap DDP container if needed
@@ -225,6 +218,7 @@ def main(cfg):
     print('Train loop started')
 
     while True:
+
         # determine and set the learning rate for this iteration
         lr = get_cosine_warmp_lr(iter_num, cfg.learning_rate, cfg.warmup_iters, cfg.lr_decay_iters, cfg.min_lr) if cfg.decay_lr else cfg.learning_rate
 
@@ -239,6 +233,7 @@ def main(cfg):
             
             # Log to wandb
             if cfg.deploy:
+
                 wandb.log({
                     "iter": iter_num,
                     "train/loss": losses['train'],
@@ -246,6 +241,7 @@ def main(cfg):
                     "lr": lr,
                     "mfu": running_mfu*100, # convert to percentage
                 })
+
             # evaluate and checkpoint model
             if losses['val'] < best_val_loss or cfg.always_save_checkpoint:
                 best_val_loss = losses['val']
@@ -282,6 +278,11 @@ def main(cfg):
 
             # immediately async prefetch next batch while model is doing the forward pass on the GPU
             X,Y = next(dataloader)
+            if device_type == 'cuda':
+                # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
+                X, Y = X.pin_memory().to(device, non_blocking=True), Y.pin_memory().to(device, non_blocking=True)
+            else:
+                X, Y = X.to(device), Y.to(device)
             # backward pass, with gradient scaling if training in fp16
             scaler.scale(loss).backward()
 
