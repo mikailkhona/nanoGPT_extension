@@ -26,7 +26,7 @@ class LayerNorm(nn.Module):
     def forward(self, input):
         return F.layer_norm(input, self.weight.shape, self.weight, self.bias, 1e-5)
 
-class SelfAttention(nn.Module):
+class CausalSelfAttention(nn.Module):
     '''
     One operation of multi-head self attention (MHSA).
     Calculate Query, Key, Value and pass through MHSA
@@ -147,7 +147,6 @@ class GPTConfig:
 class GPT(nn.Module):
 
     def __init__(self, config):
-        
         super().__init__()
         assert config.vocab_size is not None
         assert config.block_size is not None
