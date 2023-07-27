@@ -124,7 +124,8 @@ def main(cfg):
     #     meta_vocab_size = meta['vocab_size']
     #     print(f"found vocab_size = {meta_vocab_size} (inside {meta_path})")
 
-    meta_vocab_size = 100
+    data = np.load(data_dir)
+    meta_vocab_size = len(set(data))
 
     # model init
     model_args = dict(n_layer=cfg.n_layer, n_head=cfg.n_head, n_embd=cfg.n_embd, block_size=cfg.block_size,bias=cfg.bias, vocab_size=None, dropout=cfg.dropout)
@@ -225,7 +226,7 @@ def main(cfg):
 
     while True:
         # determine and set the learning rate for this iteration
-        lr = get_cosine_warmp_lr(cfg.it, cfg.learning_rate, cfg.warmup_iters, cfg.lr_decay_iters, cfg.min_lr) if cfg.decay_lr else cfg.learning_rate
+        lr = get_cosine_warmp_lr(iter_num, cfg.learning_rate, cfg.warmup_iters, cfg.lr_decay_iters, cfg.min_lr) if cfg.decay_lr else cfg.learning_rate
 
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
