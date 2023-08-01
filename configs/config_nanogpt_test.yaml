@@ -6,9 +6,9 @@ seed: 0
 # default config values designed to train a gpt2 (124M) on OpenWebText
 # I/O
 out_dir : 'out'
-eval_interval : 2000
+eval_interval : 500
 log_interval : 1
-eval_iters : 1
+eval_iters : 200
 eval_only : False # if True, script exits right after the first eval
 always_save_checkpoint : True # if True, always save a checkpoint after each eval
 init_from : 'scratch' # 'scratch' or 'resume' or 'gpt2*'
@@ -17,12 +17,13 @@ init_from : 'scratch' # 'scratch' or 'resume' or 'gpt2*'
 wandb_project : 'owt'
 wandb_run_name : 'gpt2' 
 # data
-dataset : '/home/bizon/temp-cot/Causal_graphs_chain_of_thought/tokens.npy'
+dataset_train : '/home/bizon/temp-cot/Causal_graphs_chain_of_thought/path_scm_aug1/tokens_path_train.npy'
+dataset_eval : '/home/bizon/temp-cot/Causal_graphs_chain_of_thought/path_scm_aug1/tokens_path_eval.npy'
 gradient_accumulation_steps : 5 #40 # used to simulate larger batch sizes
 batch_size : 12 # if gradient_accumulation_steps > 1, this is the micro-batch size
 # model parameters
-block_size : 512
-n_layer : 12
+block_size : 128
+n_layer : 8
 n_head : 4
 n_embd : 256
 dropout : 0.0 # for pretraining 0 is good, for finetuning try 0.1+

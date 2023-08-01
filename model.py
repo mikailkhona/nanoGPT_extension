@@ -200,7 +200,7 @@ class GPT(nn.Module):
     def forward(self, idx, targets=None):
         device = idx.device
         b, t = idx.size()
-        assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
+        # assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
         # Pad idx with empty tokens (Represented by TOKENID = 0) if its length is shorter than block_size
         if t < self.config.block_size:
             padding_length = self.config.block_size - t

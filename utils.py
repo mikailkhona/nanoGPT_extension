@@ -46,7 +46,7 @@ class SequenceDataset(Dataset):
     '''
 
     def __init__(self, filepath, block_size):
-        self.data = np.memmap(filepath, dtype=np.uint16, mode='r')
+        self.data = np.load(filepath)
         self.block_size = block_size
 
     def __len__(self):
@@ -56,6 +56,7 @@ class SequenceDataset(Dataset):
         #y is 1-index shifted version of x. Everything should be integer for tokenizer.
         x = self.data[idx : idx + self.block_size]
         y = self.data[idx + 1 : idx + 1 + self.block_size]
+
         return torch.from_numpy(x.astype(np.int64)), torch.from_numpy(y.astype(np.int64))
 
 def get_dataloader(train_data_path, val_data_path, block_size, batch_size, shuffle=True, num_workers=4):
@@ -66,8 +67,8 @@ def get_dataloader(train_data_path, val_data_path, block_size, batch_size, shuff
     train_dataset = SequenceDataset(train_data_path, block_size)
     val_dataset = SequenceDataset(val_data_path, block_size)
 
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle, pin_memory=True, num_workers=num_workers)
-    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=shuffle, pin_memory=True, num_workers=num_workers)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle, pin_memory=True, num_workers=num_workers, drop_last=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, pin_memory=True, num_workers=num_workers, drop_last=True)
 
     return train_dataloader, val_dataloader
 

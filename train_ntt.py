@@ -21,7 +21,7 @@ import time
 import math
 import pickle
 from contextlib import nullcontext
-
+import pdb
 import numpy as np
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -113,9 +113,9 @@ def main(cfg):
     best_val_loss = 1e9
     
     # Get the number of unique tokens in the dataset
-    data = np.load(data_dir)
+    data = np.load(data_dir_train)
     # add 2 (off by one error) to all tokens since 0 is reserved for padding token
-    meta_vocab_size = len(set(data)) + 2
+    meta_vocab_size = len(set(data)) + 1
 
     # model init
     model_args = dict(n_layer=cfg.n_layer, n_head=cfg.n_head, n_embd=cfg.n_embd, block_size=cfg.block_size, bias=cfg.bias, vocab_size=meta_vocab_size , dropout=cfg.dropout)
@@ -156,7 +156,7 @@ def main(cfg):
         model.crop_block_size(cfg.block_size)
         model_args['block_size'] = cfg.block_size # so that the checkpoint will have the right value
     model.to(device)
-
+    # import ipdb; ipdb.set_trace()
     # initialize a GradScaler. If enabled=False scaler is a no-op
     #Mixed precision training: look at gradients convert 32 bits to 16 bits
     scaler = torch.cuda.amp.GradScaler(enabled=(dtype == 'float16'))
@@ -188,9 +188,14 @@ def main(cfg):
         model.eval()
         for split in ['train', 'val']:
             losses = torch.zeros(cfg.eval_iters)
+    
             dataloader = iter(pick_dataloader(split))
             for k in range(cfg.eval_iters):
                 X, Y = next(dataloader)
+
+                if torch.min(Y) < 0 or torch.max(Y) >= 102:
+                    import ipdb; ipdb.set_trace()
+
                 if device_type == 'cuda':
                     # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
                     X, Y = X.pin_memory().to(device, non_blocking=True), Y.pin_memory().to(device, non_blocking=True)
@@ -198,7 +203,9 @@ def main(cfg):
                     X, Y = X.to(device), Y.to(device)
                 with ctx:
                     logits, loss = model(X, Y)
-                losses[k] = loss.item()
+
+                losses[k] = torch.nan_to_num(loss, 10.0).item()
+                
             out[split] = losses.mean()
         model.train()
         return out
@@ -279,11 +286,14 @@ def main(cfg):
 
             # immediately async prefetch next batch while model is doing the forward pass on the GPU
             X,Y = next(dataloader)
+
             if device_type == 'cuda':
                 # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
                 X, Y = X.pin_memory().to(device, non_blocking=True), Y.pin_memory().to(device, non_blocking=True)
+
             else:
                 X, Y = X.to(device), Y.to(device)
+                
             # backward pass, with gradient scaling if training in fp16
             scaler.scale(loss).backward()
 
