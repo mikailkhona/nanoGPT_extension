@@ -96,8 +96,9 @@ def main(cfg):
     ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16, 'None': torch.float32}[dtype]
     ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=device_type, dtype=ptdtype)
 
-    data_dir = cfg.dataset
-    train_dataloader, val_dataloader = get_dataloader(data_dir, data_dir, cfg.block_size, cfg.batch_size, shuffle=True, num_workers=1)
+    data_dir_train = cfg.dataset_train
+    data_dir_eval = cfg.dataset_eval
+    train_dataloader, val_dataloader = get_dataloader(data_dir_train, data_dir_eval, cfg.block_size, cfg.batch_size, shuffle=True, num_workers=1)
 
     # test to check if code is working
     # train_data = np.random.randint(0,100,5000) 

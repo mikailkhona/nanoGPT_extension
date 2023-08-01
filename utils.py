@@ -29,8 +29,6 @@ def get_cosine_warmp_lr(it, learning_rate, warmup_iters, lr_decay_iters, min_lr)
     coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff ranges 0..1
     return min_lr + coeff * (learning_rate - min_lr)
 
-
-
 class dotdict(dict):
     '''
     dot.notation access to dictionary attributes
