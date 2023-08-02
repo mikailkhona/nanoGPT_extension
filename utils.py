@@ -58,9 +58,11 @@ class SequenceDataset(Dataset):
         x = self.data[idx : idx + self.block_size]
         y = self.data[idx + 1 : idx + 1 + self.block_size]
         if(self.add_one_token):
-            return torch.from_numpy((x+1).astype(np.int64)), torch.from_numpy((y+1).astype(np.int64))
+            x = torch.tensor(x, dtype=torch.int64) + 1
+            y = torch.tensor(y, dtype=torch.int64) + 1
+            return x,y
         else:
-            return torch.from_numpy(x.astype(np.int64)), torch.from_numpy(y.astype(np.int64))
+            return torch.tensor(x, dtype=torch.int64), torch.tensor(y, dtype=torch.int64)
 
 
 def get_dataloader(train_data_path, val_data_path, block_size, batch_size, shuffle=True, num_workers=4, add_one_token=True):
@@ -84,7 +86,7 @@ class SequenceDataset_lol(Dataset):
     '''
 
     def __init__(self, filepath, add_one_token=True):
-        self.data = [list(x) for x in np.load(filepath)]  # Loading the sequences as lists
+        self.data = [list(x) for x in np.load(filepath, allow_pickle=True)]  # Loading the sequences as lists
         self.add_one_token = add_one_token
 
     def __len__(self):
@@ -95,9 +97,12 @@ class SequenceDataset_lol(Dataset):
         x = self.data[idx]
         y = x[1:] + [0]  # Assuming 0 is the padding token
         if(self.add_one_token):
-            return torch.from_numpy((x+1).astype(np.int64)), torch.from_numpy((y+1).astype(np.int64))
+            x = torch.tensor(x, dtype=torch.int64) + 1
+            y = torch.tensor(y, dtype=torch.int64) + 1
+            return x,y
         else:
-            return torch.from_numpy(x.astype(np.int64)), torch.from_numpy(y.astype(np.int64))
+            return torch.tensor(x, dtype=torch.int64), torch.tensor(y, dtype=torch.int64)
+
 
 
 def collate_fn(batch):
