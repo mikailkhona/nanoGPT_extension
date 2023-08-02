@@ -46,10 +46,10 @@ class SequenceDataset(Dataset):
     Data is integer-type for tokenizer
     '''
 
-    def __init__(self, filepath, block_size):
+    def __init__(self, filepath, block_size, add_one_token=True):
         self.data = np.load(filepath)
         self.block_size = block_size
-
+        self.add_one_token = add_one_token
     def __len__(self):
         return len(self.data) - self.block_size
 
@@ -57,25 +57,24 @@ class SequenceDataset(Dataset):
         #y is 1-index shifted version of x. Everything should be integer for tokenizer.
         x = self.data[idx : idx + self.block_size]
         y = self.data[idx + 1 : idx + 1 + self.block_size]
+        if(self.add_one_token):
+            return torch.from_numpy((x+1).astype(np.int64)), torch.from_numpy((y+1).astype(np.int64))
+        else:
+            return torch.from_numpy(x.astype(np.int64)), torch.from_numpy(y.astype(np.int64))
 
-        return torch.from_numpy(x.astype(np.int64)), torch.from_numpy(y.astype(np.int64))
 
-def get_dataloader(train_data_path, val_data_path, block_size, batch_size, shuffle=True, num_workers=4):
+def get_dataloader(train_data_path, val_data_path, block_size, batch_size, shuffle=True, num_workers=4, add_one_token=True):
     '''
     Open data directory and get train and val dataloaders
     '''
 
-    train_dataset = SequenceDataset(train_data_path, block_size)
-    val_dataset = SequenceDataset(val_data_path, block_size)
+    train_dataset = SequenceDataset(train_data_path, block_size, add_one_token)
+    val_dataset = SequenceDataset(val_data_path, block_size, add_one_token)
 
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle, pin_memory=True, num_workers=num_workers, drop_last=True)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, pin_memory=True, num_workers=num_workers, drop_last=True)
 
     return train_dataloader, val_dataloader
-
-
-
-
 
 class SequenceDataset_lol(Dataset):
     '''
@@ -84,8 +83,9 @@ class SequenceDataset_lol(Dataset):
     Data is integer-type for tokenizer
     '''
 
-    def __init__(self, filepath):
+    def __init__(self, filepath, add_one_token=True):
         self.data = [list(x) for x in np.load(filepath)]  # Loading the sequences as lists
+        self.add_one_token = add_one_token
 
     def __len__(self):
         return len(self.data)
@@ -94,7 +94,11 @@ class SequenceDataset_lol(Dataset):
         # y is 1-index shifted version of x. Everything should be integer for tokenizer.
         x = self.data[idx]
         y = x[1:] + [0]  # Assuming 0 is the padding token
-        return torch.tensor(x, dtype=torch.int64), torch.tensor(y, dtype=torch.int64)
+        if(self.add_one_token):
+            return torch.from_numpy((x+1).astype(np.int64)), torch.from_numpy((y+1).astype(np.int64))
+        else:
+            return torch.from_numpy(x.astype(np.int64)), torch.from_numpy(y.astype(np.int64))
+
 
 def collate_fn(batch):
     x, y = zip(*batch)
@@ -103,13 +107,13 @@ def collate_fn(batch):
     y_padded = pad_sequence(y, batch_first=True, padding_value=0)
     return x_padded, y_padded
 
-def get_dataloader_lol(train_data_path, val_data_path, batch_size, shuffle=True, num_workers=4):
+def get_dataloader_lol(train_data_path, val_data_path, batch_size, shuffle=True, num_workers=4, add_one_token=True):
     '''
     Open data directory and get train and val dataloaders
     '''
 
-    train_dataset = SequenceDataset_lol(train_data_path)
-    val_dataset = SequenceDataset_lol(val_data_path)
+    train_dataset = SequenceDataset_lol(train_data_path, add_one_token)
+    val_dataset = SequenceDataset_lol(val_data_path, add_one_token)
 
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle, pin_memory=True, num_workers=num_workers, drop_last=True, collate_fn=collate_fn)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, pin_memory=True, num_workers=num_workers, drop_last=True, collate_fn=collate_fn)

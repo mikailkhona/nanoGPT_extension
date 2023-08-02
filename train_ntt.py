@@ -31,7 +31,7 @@ import pdb
 from model import GPTConfig, GPT
 import hydra
 import torchvision
-from utils import SequenceDataset, get_dataloader, dotdict, get_cosine_warmp_lr
+from utils import get_dataloader, get_dataloader_lol, dotdict, get_cosine_warmp_lr
 
 from init import set_seed, open_log, init_wandb, cleanup
 
@@ -96,26 +96,25 @@ def main(cfg):
     ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16, 'None': torch.float32}[dtype]
     ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=device_type, dtype=ptdtype)
 
-    data_dir_train = cfg.dataset_train
-    data_dir_eval = cfg.dataset_eval
-    train_dataloader, val_dataloader = get_dataloader(data_dir_train, data_dir_eval, cfg.block_size, cfg.batch_size, shuffle=True, num_workers=1)
-
-    # test to check if code is working
-    # train_data = np.random.randint(0,100,5000) 
-    # val_data = np.random.randint(0,100,5000) 
-
-    def pick_dataloader(split):
-        dataloader = train_dataloader if split == 'train' else val_dataloader
-        return dataloader
-
     # init these up here, can override if init_from='resume' (i.e. from a checkpoint)
     iter_num = 0
     best_val_loss = 1e9
     
+    ### DATA STUFF HERE
+
     # Get the number of unique tokens in the dataset
     data = np.load(data_dir_train)
-    # add 2 (off by one error) to all tokens since 0 is reserved for padding token
-    meta_vocab_size = len(set(data)) + 1
+    # add 1 to all tokens since 0 is reserved for padding token (which is done by dataloader)
+    flattened_data = [element for sublist in data for element in sublist]
+    meta_vocab_size = len(list(set(flattened_list)))
+
+    data_dir_train = cfg.dataset_train
+    data_dir_eval = cfg.dataset_eval
+    train_dataloader, val_dataloader = get_dataloader_lol(data_dir_train, data_dir_eval, cfg.block_size, cfg.batch_size, shuffle=True, num_workers=1)
+
+    def pick_dataloader(split):
+        dataloader = train_dataloader if split == 'train' else val_dataloader
+        return dataloader
 
     # model init
     model_args = dict(n_layer=cfg.n_layer, n_head=cfg.n_head, n_embd=cfg.n_embd, block_size=cfg.block_size, bias=cfg.bias, vocab_size=meta_vocab_size , dropout=cfg.dropout)
@@ -223,6 +222,7 @@ def main(cfg):
     local_iter_num = 0 # number of iterations in the lifetime of this process
     raw_model = model.module if ddp else model # unwrap DDP container if needed
     running_mfu = -1.0
+
     print('Train loop started')
 
     while True:
@@ -263,7 +263,8 @@ def main(cfg):
                         'config': cfg,
                     }
                     print(f"saving checkpoint to {cfg.out_dir}")
-                    torch.save(checkpoint, os.path.join(cfg.out_dir, 'ckpt.pt'))
+                    #Save checkpoint with iter num:
+                    torch.save(checkpoint, os.path.join(cfg.out_dir, 'ckpt' + str(iter_num) + '.pt'))
 
         if iter_num == 0 and cfg.eval_only:
             break
