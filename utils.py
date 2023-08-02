@@ -47,7 +47,7 @@ class SequenceDataset(Dataset):
     '''
 
     def __init__(self, filepath, block_size, add_one_token=True):
-        self.data = np.load(filepath)
+        self.data = np.load(filepath, allow_pickle=True)
         self.block_size = block_size
         self.add_one_token = add_one_token
     def __len__(self):
@@ -68,6 +68,7 @@ class SequenceDataset(Dataset):
 def get_dataloader(train_data_path, val_data_path, block_size, batch_size, shuffle=True, num_workers=4, add_one_token=True):
     '''
     Open data directory and get train and val dataloaders
+    add one token: shifts all token idxs by 1 because 0 is the padding token
     '''
 
     train_dataset = SequenceDataset(train_data_path, block_size, add_one_token)
