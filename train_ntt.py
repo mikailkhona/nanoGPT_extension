@@ -102,12 +102,13 @@ def main(cfg):
     
     ### DATA STUFF HERE
 
-    # Get the number of unique tokens in the dataset
+    # Get the number of unique tokens in the dataset (meta_vocab_size) to initialize model
     data = np.load(data_dir_train)
     # add 1 to all tokens since 0 is reserved for padding token (which is done by dataloader)
     flattened_data = [element for sublist in data for element in sublist]
     meta_vocab_size = len(list(set(flattened_list)))
 
+    #Create dataloaders
     data_dir_train = cfg.dataset_train
     data_dir_eval = cfg.dataset_eval
     train_dataloader, val_dataloader = get_dataloader_lol(data_dir_train, data_dir_eval, cfg.block_size, cfg.batch_size, shuffle=True, num_workers=1)
