@@ -9,6 +9,7 @@ import torch
 import random
 from typing import Any, Callable, Dict, List, Tuple, Union
 import math
+from torch.nn.utils.rnn import pad_sequence
 
 
 # learning rate decay scheduler (cosine with warmup)
@@ -72,3 +73,45 @@ def get_dataloader(train_data_path, val_data_path, block_size, batch_size, shuff
 
     return train_dataloader, val_dataloader
 
+
+
+
+
+class SequenceDataset_lol(Dataset):
+    '''
+    Dataset and DataLoader for sequence data.
+    Made specifically for autoregressive next token prediction training
+    Data is integer-type for tokenizer
+    '''
+
+    def __init__(self, filepath):
+        self.data = [list(x) for x in np.load(filepath)]  # Loading the sequences as lists
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        # y is 1-index shifted version of x. Everything should be integer for tokenizer.
+        x = self.data[idx]
+        y = x[1:] + [0]  # Assuming 0 is the padding token
+        return torch.tensor(x, dtype=torch.int64), torch.tensor(y, dtype=torch.int64)
+
+def collate_fn(batch):
+    x, y = zip(*batch)
+    # Pad sequences to the maximum length in the batch
+    x_padded = pad_sequence(x, batch_first=True, padding_value=0)
+    y_padded = pad_sequence(y, batch_first=True, padding_value=0)
+    return x_padded, y_padded
+
+def get_dataloader_lol(train_data_path, val_data_path, batch_size, shuffle=True, num_workers=4):
+    '''
+    Open data directory and get train and val dataloaders
+    '''
+
+    train_dataset = SequenceDataset_lol(train_data_path)
+    val_dataset = SequenceDataset_lol(val_data_path)
+
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle, pin_memory=True, num_workers=num_workers, drop_last=True, collate_fn=collate_fn)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, pin_memory=True, num_workers=num_workers, drop_last=True, collate_fn=collate_fn)
+
+    return train_dataloader, val_dataloader
