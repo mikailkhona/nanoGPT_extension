@@ -21,16 +21,13 @@ import time
 import math
 import pickle
 from contextlib import nullcontext
-import pdb
 import numpy as np
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 import wandb
-import pdb
 from model import GPTConfig, GPT
 import hydra
-import torchvision
 from utils import get_dataloader, get_dataloader_lol, dotdict, get_cosine_warmp_lr
 
 from init import set_seed, open_log, init_wandb, cleanup
@@ -101,24 +98,21 @@ def main(cfg):
     best_val_loss = 1e9
     
     ### DATA STUFF HERE
-
-    # Get the number of unique tokens in the dataset (meta_vocab_size) to initialize model
-    data = np.load(data_dir_train)
-    # add 1 to all tokens since 0 is reserved for padding token (which is done by dataloader)
-    flattened_data = [element for sublist in data for element in sublist]
-    meta_vocab_size = len(list(set(flattened_list)))
-
-    #Create dataloaders
     data_dir_train = cfg.dataset_train
     data_dir_eval = cfg.dataset_eval
-    train_dataloader, val_dataloader = get_dataloader_lol(data_dir_train, data_dir_eval, cfg.block_size, cfg.batch_size, shuffle=True, num_workers=1)
+    # Get the number of unique tokens in the dataset (meta_vocab_size) from the training data file to initialize model
+    data = np.load(data_dir_train, allow_pickle=True)
+    flattened_data = [element for sublist in data for element in sublist]
+    meta_vocab_size = len(list(set(flattened_data)))
+    #Create dataloaders
+    train_dataloader, val_dataloader = get_dataloader_lol(train_data_path=data_dir_train, val_data_path=data_dir_eval, batch_size = cfg.batch_size, num_workers=1)
 
     def pick_dataloader(split):
         dataloader = train_dataloader if split == 'train' else val_dataloader
         return dataloader
 
     # model init
-    model_args = dict(n_layer=cfg.n_layer, n_head=cfg.n_head, n_embd=cfg.n_embd, block_size=cfg.block_size, bias=cfg.bias, vocab_size=meta_vocab_size , dropout=cfg.dropout)
+    model_args = dict(n_layer=cfg.n_layer, n_head=cfg.n_head, n_embd=cfg.n_embd, block_size=cfg.block_size, bias=cfg.bias, vocab_size=meta_vocab_size+1, dropout=cfg.dropout)
                     
     if cfg.init_from == 'scratch':
         # init a new model from scratch
@@ -156,7 +150,7 @@ def main(cfg):
         model.crop_block_size(cfg.block_size)
         model_args['block_size'] = cfg.block_size # so that the checkpoint will have the right value
     model.to(device)
-    # import ipdb; ipdb.set_trace()
+
     # initialize a GradScaler. If enabled=False scaler is a no-op
     #Mixed precision training: look at gradients convert 32 bits to 16 bits
     scaler = torch.cuda.amp.GradScaler(enabled=(dtype == 'float16'))
@@ -192,10 +186,6 @@ def main(cfg):
             dataloader = iter(pick_dataloader(split))
             for k in range(cfg.eval_iters):
                 X, Y = next(dataloader)
-
-                if torch.min(Y) < 0 or torch.max(Y) >= 102:
-                    import ipdb; ipdb.set_trace()
-
                 if device_type == 'cuda':
                     # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
                     X, Y = X.pin_memory().to(device, non_blocking=True), Y.pin_memory().to(device, non_blocking=True)
@@ -204,7 +194,7 @@ def main(cfg):
                 with ctx:
                     logits, loss = model(X, Y)
 
-                losses[k] = torch.nan_to_num(loss, 10.0).item()
+                losses[k] = loss.item()
                 
             out[split] = losses.mean()
         model.train()
@@ -236,7 +226,7 @@ def main(cfg):
 
         # evaluate the loss on train/val sets and write checkpoints
         if iter_num % cfg.eval_interval == 0 and master_process:
-
+    
             losses = estimate_loss()
             print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
             

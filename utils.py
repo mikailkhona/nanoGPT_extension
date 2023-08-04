@@ -39,6 +39,41 @@ class dotdict(dict):
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
 
+def generate_batches_lol(batch_size, file_path):
+    '''
+    Returns a dataloader
+    '''
+
+     # Compute the absolute maximum length across all sequences
+    # absolute_max_length = max(len(sublist) for sublist in dataset)
+
+    # Load the entire dataset
+    dataset = np.load(file_path, allow_pickle=True)
+
+    # Create an index array and shuffle it
+    indices = np.arange(len(dataset))
+    np.random.shuffle(indices)
+
+    # Iterate through the dataset in batches
+    for start_idx in range(0, len(dataset), batch_size):
+        # Select the indices for this batch
+        batch_indices = indices[start_idx:start_idx + batch_size]
+
+        # Extract the corresponding sublists
+        batch_sublists = [dataset[i] for i in batch_indices]
+
+        # Compute the maximum length of sublists in this batch
+        max_length = max(len(sublist) for sublist in batch_sublists)
+
+        # Pad each sublist with zeros to match the maximum length
+        padded_batch_x = [sublist + [0] * (max_length - len(sublist)) for sublist in batch_sublists]
+
+        # Shift the sublists by one to create the Y sequences
+        padded_batch_y = [sublist[1:] + [0] for sublist in padded_batch_x]
+
+        yield np.array(padded_batch_x), np.array(padded_batch_y)
+
+
 class SequenceDataset(Dataset):
     '''
     Dataset and DataLoader for sequence data.
@@ -75,7 +110,7 @@ def get_dataloader(train_data_path, val_data_path, block_size, batch_size, shuff
     val_dataset = SequenceDataset(val_data_path, block_size, add_one_token)
 
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle, pin_memory=True, num_workers=num_workers, drop_last=True)
-    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, pin_memory=True, num_workers=num_workers, drop_last=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=shuffle, pin_memory=True, num_workers=num_workers, drop_last=True)
 
     return train_dataloader, val_dataloader
 
@@ -97,6 +132,7 @@ class SequenceDataset_lol(Dataset):
         # y is 1-index shifted version of x. Everything should be integer for tokenizer.
         x = self.data[idx]
         y = x[1:] + [0]  # Assuming 0 is the padding token
+
         if(self.add_one_token):
             x = torch.tensor(x, dtype=torch.int64) + 1
             y = torch.tensor(y, dtype=torch.int64) + 1
@@ -104,14 +140,13 @@ class SequenceDataset_lol(Dataset):
         else:
             return torch.tensor(x, dtype=torch.int64), torch.tensor(y, dtype=torch.int64)
 
-
-
-def collate_fn(batch):
+def collate_fn_pad(batch):
     x, y = zip(*batch)
     # Pad sequences to the maximum length in the batch
     x_padded = pad_sequence(x, batch_first=True, padding_value=0)
     y_padded = pad_sequence(y, batch_first=True, padding_value=0)
     return x_padded, y_padded
+
 
 def get_dataloader_lol(train_data_path, val_data_path, batch_size, shuffle=True, num_workers=4, add_one_token=True):
     '''
@@ -121,7 +156,27 @@ def get_dataloader_lol(train_data_path, val_data_path, batch_size, shuffle=True,
     train_dataset = SequenceDataset_lol(train_data_path, add_one_token)
     val_dataset = SequenceDataset_lol(val_data_path, add_one_token)
 
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle, pin_memory=True, num_workers=num_workers, drop_last=True, collate_fn=collate_fn)
-    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, pin_memory=True, num_workers=num_workers, drop_last=True, collate_fn=collate_fn)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle, pin_memory=True, num_workers=num_workers, drop_last=False, collate_fn=collate_fn_pad)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=shuffle, pin_memory=True, num_workers=num_workers, drop_last=False, collate_fn=collate_fn_pad)
 
     return train_dataloader, val_dataloader
+
+
+# class ZeroPadCollator:
+
+#     @staticmethod
+#     def collate_tensors(batch: List[torch.Tensor]) -> torch.Tensor:
+#         dims = batch[0].dim()
+#         max_size = [max([b.size(i) for b in batch]) for i in range(dims)]
+#         size = (len(batch),) + tuple(max_size)
+#         canvas = batch[0].new_zeros(size=size)
+#         for i, b in enumerate(batch):
+#             sub_tensor = canvas[i]
+#             for d in range(dims):
+#                 sub_tensor = sub_tensor.narrow(d, 0, b.size(d))
+#             sub_tensor.add_(b)
+#         return canvas
+
+#     def collate(self, batch, ) -> List[torch.Tensor]:
+#         dims = len(batch[0])
+#         return [self.collate_tensors([b[i] for b in batch]) for i in range(dims)]
