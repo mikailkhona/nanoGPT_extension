@@ -1,21 +1,3 @@
-"""
-This training script can be run both on a single gpu in debug mode,
-and also in a larger training run with distributed data parallel (ddp).
-
-To run on a single GPU, example:
-$ python train.py --batch_size=32 --compile=False
-
-To run with DDP on 4 gpus on 1 node, example:
-$ torchrun --standalone --nproc_per_node=4 train.py
-
-To run with DDP on 4 gpus across 2 nodes, example:
-- Run on the first (master) node with example IP 123.456.123.456:
-$ torchrun --nproc_per_node=8 --nnodes=2 --node_rank=0 --master_addr=123.456.123.456 --master_port=1234 train.py
-- Run on the worker node:
-$ torchrun --nproc_per_node=8 --nnodes=2 --node_rank=1 --master_addr=123.456.123.456 --master_port=1234 train.py
-(If your cluster does not have Infiniband interconnect prepend NCCL_IB_DISABLE=1)
-"""
-
 import os
 import time
 import math
@@ -43,7 +25,7 @@ else:
 def main(cfg):
 
     # Initialize wandb project
-    init_wandb(cfg, 'chain_of_thought')
+    init_wandb(cfg, cfg.wandb_project)
 
     set_seed(cfg.seed)
     # create log file
@@ -55,6 +37,18 @@ def main(cfg):
     ddp = int(os.environ.get('RANK', -1)) != -1 # is this a ddp run?
 
     if ddp:
+        """
+        To run with DDP on 4 gpus on 1 node, example:
+        $ torchrun --standalone --nproc_per_node=4 train.py
+
+        To run with DDP on 4 gpus across 2 nodes, example:
+        - Run on the first (master) node with example IP 123.456.123.456:
+        $ torchrun --nproc_per_node=8 --nnodes=2 --node_rank=0 --master_addr=123.456.123.456 --master_port=1234 train.py
+        - Run on the worker node:
+        $ torchrun --nproc_per_node=8 --nnodes=2 --node_rank=1 --master_addr=123.456.123.456 --master_port=1234 train.py
+        (If your cluster does not have Infiniband interconnect prepend NCCL_IB_DISABLE=1)
+        """
+
         init_process_group(backend=cfg.backend)
         ddp_rank = int(os.environ['RANK'])
         ddp_local_rank = int(os.environ['LOCAL_RANK'])
@@ -112,6 +106,7 @@ def main(cfg):
         return dataloader
 
     # model init
+    #add + 1 to meta_vocab_size to account for padding token with TOKENID=0
     model_args = dict(n_layer=cfg.n_layer, n_head=cfg.n_head, n_embd=cfg.n_embd, block_size=cfg.block_size, bias=cfg.bias, vocab_size=meta_vocab_size+1, dropout=cfg.dropout)
                     
     if cfg.init_from == 'scratch':
@@ -255,7 +250,8 @@ def main(cfg):
                     }
                     print(f"saving checkpoint to {cfg.out_dir}")
                     #Save checkpoint with iter num:
-                    torch.save(checkpoint, os.path.join(cfg.out_dir, 'ckpt' + str(iter_num) + '.pt'))
+                    if(iter_num%(cfg.eval_interval*10)==0):
+                        torch.save(checkpoint, os.path.join(cfg.out_dir, 'ckpt' + str(iter_num) + '.pt'))
 
         if iter_num == 0 and cfg.eval_only:
             break
