@@ -209,7 +209,6 @@ class GPT(nn.Module):
         #     t = self.config.block_size # Update t to the new length after padding
         #     if targets is not None:
         #         targets = torch.cat((targets, padding_tokens), dim=1)
-        
 
         pos = torch.arange(0, t, dtype=torch.long, device=device) # shape (t)
 
