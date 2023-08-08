@@ -98,6 +98,7 @@ def main(cfg):
     data = np.load(data_dir_train, allow_pickle=True)
     flattened_data = [element for sublist in data for element in sublist]
     meta_vocab_size = len(list(set(flattened_data)))
+
     #Create dataloaders
     train_dataloader, val_dataloader = get_dataloader_lol(train_data_path=data_dir_train, val_data_path=data_dir_eval, batch_size = cfg.batch_size, num_workers=1)
 
@@ -106,7 +107,7 @@ def main(cfg):
         return dataloader
 
     # model init
-    #add + 1 to meta_vocab_size to account for padding token with TOKENID=0
+    # add + 1 to meta_vocab_size to account for padding token with TOKENID=0
     model_args = dict(n_layer=cfg.n_layer, n_head=cfg.n_head, n_embd=cfg.n_embd, block_size=cfg.block_size, bias=cfg.bias, vocab_size=meta_vocab_size+1, dropout=cfg.dropout)
                     
     if cfg.init_from == 'scratch':
@@ -239,7 +240,8 @@ def main(cfg):
             # evaluate and checkpoint model
             if losses['val'] < best_val_loss or cfg.always_save_checkpoint:
                 best_val_loss = losses['val']
-                if iter_num > 0:
+                
+                if iter_num > 0 and iter_num%(cfg.save_ckpt_interval)==0:
                     checkpoint = {
                         'model': raw_model.state_dict(),
                         'optimizer': optimizer.state_dict(),
@@ -248,10 +250,9 @@ def main(cfg):
                         'best_val_loss': best_val_loss,
                         'config': cfg,
                     }
-                    print(f"saving checkpoint to {cfg.out_dir}")
                     #Save checkpoint with iter num:
-                    if(iter_num%(cfg.eval_interval*10)==0):
-                        torch.save(checkpoint, os.path.join(cfg.out_dir, 'ckpt' + str(iter_num) + '.pt'))
+                    torch.save(checkpoint, os.path.join(cfg.out_dir, 'ckpt' + str(iter_num) + '.pt'))
+                    print(f"saving checkpoint to {cfg.out_dir}")
 
         if iter_num == 0 and cfg.eval_only:
             break
