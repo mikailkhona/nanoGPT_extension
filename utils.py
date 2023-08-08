@@ -131,13 +131,15 @@ class SequenceDataset_lol(Dataset):
     def __getitem__(self, idx):
         # y is 1-index shifted version of x. Everything should be integer for tokenizer.
         x = self.data[idx]
-        y = x[1:] + [0]  # Assuming 0 is the padding token
+        y = x[1:] + [-1]  # Assuming 0 is the padding token
 
         if(self.add_one_token):
             x = torch.tensor(x, dtype=torch.int64) + 1
+            y = x[1:] + [-1]  # Assuming 0 is the padding token
             y = torch.tensor(y, dtype=torch.int64) + 1
             return x,y
         else:
+            y = x[1:] + [0]  # Assuming 0 is the padding token
             return torch.tensor(x, dtype=torch.int64), torch.tensor(y, dtype=torch.int64)
 
 def collate_fn_pad(batch):
