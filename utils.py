@@ -134,8 +134,8 @@ class SequenceDataset_lol(Dataset):
         y = x[1:] + [-1]  # Assuming 0 is the padding token
 
         if(self.add_one_token):
-            x = torch.tensor(x, dtype=torch.int64) + 1
             y = x[1:] + [-1]  # Assuming 0 is the padding token
+            x = torch.tensor(x, dtype=torch.int64) + 1
             y = torch.tensor(y, dtype=torch.int64) + 1
             return x,y
         else:
