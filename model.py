@@ -200,15 +200,15 @@ class GPT(nn.Module):
     def forward(self, idx, targets=None):
         device = idx.device
         b, t = idx.size()
-        # assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
+        assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
         # Pad idx with empty tokens (Represented by TOKENID = 0) if its length is shorter than block_size
-        if t < self.config.block_size:
-            padding_length = self.config.block_size - t
-            padding_tokens = torch.zeros((b, padding_length), dtype=torch.long, device=device)
-            idx = torch.cat((idx, padding_tokens), dim=1)
-            t = self.config.block_size # Update t to the new length after padding
-            if targets is not None:
-                targets = torch.cat((targets, padding_tokens), dim=1)
+        # if t < self.config.block_size:
+        #     padding_length = self.config.block_size - t
+        #     padding_tokens = torch.zeros((b, padding_length), dtype=torch.long, device=device)
+        #     idx = torch.cat((idx, padding_tokens), dim=1)
+        #     t = self.config.block_size # Update t to the new length after padding
+        #     if targets is not None:
+        #         targets = torch.cat((targets, padding_tokens), dim=1)
         
 
         pos = torch.arange(0, t, dtype=torch.long, device=device) # shape (t)
