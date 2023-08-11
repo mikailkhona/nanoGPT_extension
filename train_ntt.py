@@ -120,7 +120,7 @@ def main(cfg):
     elif cfg.init_from == 'resume':
         print(f"Resuming training from {cfg.out_dir}")
         # resume training from a checkpoint.
-        ckpt_path = os.path.join(cfg.out_dir, 'ckpt.pt')
+        ckpt_path = os.path.join(cfg.out_dir, 'ckpt9950.pt')
         checkpoint = torch.load(ckpt_path, map_location=device)
         checkpoint_model_args = checkpoint['model_args']
         # force these config attributes to be equal otherwise we can't even resume training
@@ -181,7 +181,12 @@ def main(cfg):
     
             dataloader = iter(pick_dataloader(split))
             for k in range(cfg.eval_iters):
-                X, Y = next(dataloader)
+                try:
+                    X,Y = next(dataloader)
+                except StopIteration:
+                    dataloader = iter(pick_dataloader('train'))
+                    X,Y = next(dataloader)
+
                 if device_type == 'cuda':
                     # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
                     X, Y = X.pin_memory().to(device, non_blocking=True), Y.pin_memory().to(device, non_blocking=True)
@@ -274,7 +279,11 @@ def main(cfg):
                 loss = loss / cfg.gradient_accumulation_steps # scale the loss to account for gradient accumulation
 
             # immediately async prefetch next batch while model is doing the forward pass on the GPU
-            X,Y = next(dataloader)
+            try:
+                X,Y = next(dataloader)
+            except StopIteration:
+                dataloader = iter(pick_dataloader('train'))
+                X, Y = next(dataloader)
 
             if device_type == 'cuda':
                 # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)

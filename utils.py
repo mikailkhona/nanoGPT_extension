@@ -164,6 +164,51 @@ def get_dataloader_lol(train_data_path, val_data_path, batch_size, shuffle=True,
     return train_dataloader, val_dataloader
 
 
+def check_edge_accuracy(G, nodes, start_index, stop_index):
+    """
+    Check whether every edge in nodes (defined by pairs of successive nodes) is an actual edge in the graph G.
+
+    Parameters:
+    - G (networkx.DiGraph): A directed acyclic graph.
+    - nodes (list): List of node names supposed to form a simple path.
+
+    Returns:
+    - bool: True if every consecutive pair of nodes in the list is an edge in G, False otherwise.
+    """
+    edge_bools = []
+    edge_list = []
+    for i in range(start_index, stop_index-1):
+        edge_bools.append(G.has_edge(nodes[i], nodes[i + 1]))
+        edge_list.append((nodes[i], nodes[i + 1]))
+
+    does_end_at_target = (nodes[1]==nodes[stop_index-1])
+    return np.array(edge_bools), edge_list, does_end_at_target
+
+def check_generated_path_accuracy(dag, generated_tokens, token_map):
+
+    num_samples = len(generated_tokens)
+    batch_size = len(generated_tokens[0])
+
+    accuracies = np.zeros((num_samples,batch_size))
+    does_end_at_targets = np.zeros((num_samples,batch_size))
+    for j in range(num_samples):
+        for i in range(batch_size):
+            batch_idx = i
+            sample_idx = j
+            tokens = generated_tokens[sample_idx][batch_idx].cpu().numpy()
+            nodes = [token_map[token.item() - 1] for token in tokens if token.item() != 0]
+            stop_token_indices = np.where(np.array(nodes) == '###')[0]
+            if stop_token_indices.shape[0] == 0:
+                stop_index = len(nodes)
+            else:
+                stop_index = stop_token_indices[0]
+            edge_bools, edge_list, does_end_at_target = check_edge_accuracy(dag, nodes, start_index=2, stop_index=stop_index)
+            accuracies[j,i] = np.mean(edge_bools)
+            does_end_at_targets[j,i] = does_end_at_target
+
+    return accuracies, does_end_at_targets
+
+
 # class ZeroPadCollator:
 
 #     @staticmethod
