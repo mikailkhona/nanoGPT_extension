@@ -152,7 +152,7 @@ def main(cfg):
     scaler = torch.cuda.amp.GradScaler(enabled=(dtype == 'float16'))
 
     # optimizer
-    optimizer = model.configure_optimizers(cfg.weight_decay, cfg.learning_rate, (cfg.beta1, cfg.beta2), device_type)
+    optimizer = model.configure_optimizers(cfg.optimizer, cfg.weight_decay, cfg.learning_rate, (cfg.beta1, cfg.beta2), device_type)
     if cfg.init_from == 'resume':
         optimizer.load_state_dict(checkpoint['optimizer'])
     checkpoint = None # free up memory
@@ -255,6 +255,7 @@ def main(cfg):
                         'best_val_loss': best_val_loss,
                         'config': cfg,
                     }
+                    
                     #Save checkpoint with iter num:
                     torch.save(checkpoint, os.path.join(cfg.out_dir, 'ckpt' + str(iter_num) + '.pt'))
                     print(f"saving checkpoint to {cfg.out_dir}")
