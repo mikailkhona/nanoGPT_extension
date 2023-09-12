@@ -77,9 +77,9 @@ def main(cfg):
 
     # Load DAG and token_map to check paths:
     path = cfg.dataset_path 
-    scm_file_path = path + 'random_frozen_scm_used.npz'
-    scm_dict = np.load(scm_file_path, allow_pickle=True)
-    with open(path + 'dag_path_scm.pkl', "rb") as f:
+    graph_file_path = path + "graph_path.npz"
+    graph_dict = np.load(scm_file_path, allow_pickle=True)
+    with open(path + "dag_path.pkl", "rb") as f:
         dag =  pickle.load(f)
     token_map = scm_dict['token_map'].item()
 

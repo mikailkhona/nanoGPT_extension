@@ -208,6 +208,10 @@ def check_generated_path_accuracy(dag, generated_tokens, token_map):
 
     return accuracies, does_end_at_targets
 
+def check_generated_path_classification_accuracy(dag, generated_tokens, token_map):
+    
+    return edge_accuracies, does_end_at_targets, classification_accuracy
+
 
 # class ZeroPadCollator:
 
