@@ -8,21 +8,27 @@ import torch
 from torch.distributed import init_process_group, destroy_process_group
 import wandb
 from model import GPTConfig, GPT
-import hydra
-from utils import get_dataloader, get_dataloader_lol, dotdict, get_cosine_warmp_lr, check_generated_path_accuracy
+from utils import get_dataloader, get_dataloader_lol, dotdict, get_cosine_warmp_lr, check_generated_path_accuracy, check_generated_path_classification_accuracy 
 
 from init import set_seed, open_log, init_wandb, cleanup
+import omegaconf
+import argparse
 
 if torch.cuda.is_available():
     dtype = 'bfloat16' if torch.cuda.is_bf16_supported() else 'float16' # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
 else:
     dtype = 'None'
 
+parser = argparse.ArgumentParser(description='Process some integers.')
+parser.add_argument('--frac', type=str)
+args = parser.parse_args()
+
+
 # HYDRA_FULL_ERROR=1
 
-@hydra.main(config_path="./configs", config_name="config_nanogpt_test.yaml")
-def main(cfg):
+def main():
 
+    cfg = omegaconf.OmegaConf.load("./configs/config_nanogpt_test.yaml")
     # Initialize wandb project
     init_wandb(cfg, cfg.wandb_project)
 
@@ -56,12 +62,13 @@ def main(cfg):
     best_val_loss = 1e9
     
     ### DATA STUFF HERE
+    frac = args.frac
     if (cfg.cot):
-        data_dir_train = cfg.dataset_path + 'tokens_path_train_cot.npy'
-        data_dir_eval = cfg.dataset_path + 'tokens_path_eval_cot.npy'
+        data_dir_train = cfg.dataset_path + frac + '/tokens_path_train_cot.npy'
+        data_dir_eval = cfg.dataset_path + frac + '/tokens_path_eval_cot.npy'
     else:
-        data_dir_train = cfg.dataset_path + 'tokens_path_train_direct.npy'
-        data_dir_eval = cfg.dataset_path + 'tokens_path_eval_direct.npy'
+        data_dir_train = cfg.dataset_path + frac + '/tokens_path_train_direct.npy'
+        data_dir_eval = cfg.dataset_path + frac + '/tokens_path_eval_direct.npy'
 
     # Get the number of unique tokens in the dataset (meta_vocab_size) from the training data file to initialize model
     data = np.load(data_dir_train, allow_pickle=True)
@@ -76,12 +83,12 @@ def main(cfg):
         return dataloader
 
     # Load DAG and token_map to check paths:
-    path = cfg.dataset_path 
-    graph_file_path = path + "graph_path.npz"
-    graph_dict = np.load(scm_file_path, allow_pickle=True)
-    with open(path + "dag_path.pkl", "rb") as f:
+    path = cfg.dataset_path + frac 
+    graph_filepath = path + "/graph_path.npz"
+    graph_dict = np.load(graph_filepath, allow_pickle=True)
+    with open(path + "/dag_path.pkl", "rb") as f:
         dag =  pickle.load(f)
-    token_map = scm_dict['token_map'].item()
+    token_map = graph_dict['token_map'].item()
 
     # model init
     # add + 1 to meta_vocab_size to account for padding token with TOKENID=0
@@ -129,7 +136,9 @@ def main(cfg):
     scaler = torch.cuda.amp.GradScaler(enabled=(dtype == 'float16'))
 
     # optimizer
-    optimizer = model.configure_optimizers(optimizer=cfg.optimizer, weight_decay=cfg.weight_decay, learning_rate=cfg.learning_rate, betas=(cfg.beta1, cfg.beta2), device_type=device_type)
+    if cfg.optimizer == 'AdamW':
+        optimizer = torch.optim.AdamW(model.parameters(), weight_decay=cfg.weight_decay, lr=cfg.learning_rate, betas=(cfg.beta1, cfg.beta2))
+    #optimizer = model.configure_optimizers(optimizer=cfg.optimizer, weight_decay=cfg.weight_decay, learning_rate=cfg.learning_rate, betas=(cfg.beta1, cfg.beta2), device_type=device_type)
     if cfg.init_from == 'resume':
         optimizer.load_state_dict(checkpoint['optimizer'])
     checkpoint = None # free up memory
@@ -220,7 +229,7 @@ def main(cfg):
                             # Each sublist of size batch_size x max_new_tokens + n
                             generated_paths.append(model.generate(x[0:,0:n].to(device), max_new_tokens, temperature=temperature, top_k=top_k))
                 model.train()
-                edge_accuracies, does_end_at_targets = check_generated_path_accuracy(dag, generated_paths, token_map)
+                edge_accuracies, classification_accuracy, nopath_accuracy, path_accuracy, does_end_at_targets = check_generated_path_classification_accuracy(dag, x, generated_paths, token_map)
                 edge_accuracies[np.isnan(edge_accuracies)] = 0
                 print(np.mean(edge_accuracies))
 
@@ -230,6 +239,9 @@ def main(cfg):
                     "val/loss": losses['val'],
                     "lr": lr,
                     "edge_accuracies": np.mean(edge_accuracies),
+                    "classification_accuracy": classification_accuracy, 
+                    "path_accuracy": path_accuracy, 
+                    "nopath_accuracy": nopath_accuracy, 
                     "does_end_at_target": np.mean(does_end_at_targets),
                 })
 
