@@ -79,17 +79,17 @@ class CausalSelfAttention(nn.Module):
             # efficient attention using Flash Attention CUDA kernels
             y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.dropout if self.training else 0, is_causal=True)
         else:
-            # scale dot-product attention with causality
-
-            # (B N T H) x (B N T H) -> (B N T T)
+            # scale dot-product attention with causal mask
+            # (B N T H_) x (B N T H_) -> (B N T T)
             pre_softmax_att = torch.einsum('bnth,bnsh->bnts', q, k) * (1.0 / math.sqrt(k.size(-1)))
             pre_softmax_att = pre_softmax_att.masked_fill(self.causal_mask[:, :, :T, :T] == 0, float('-inf'))
             attn_mask = F.softmax(pre_softmax_att, dim=-1)
-
             # apply attention to values
+            # (B N T T_) x (B N T_ H) -> (B N T H)
             y = torch.einsum('bnts,bnsh->bnth', attn_mask, v)
        
-        y = rearrange(y, 'b n t h -> b t (n h)') # re-assemble all head outputs side by side
+        # re-assemble all head outputs side by side
+        y = rearrange(y, 'b n t h -> b t (n h)') 
         # output projection
         y = self.resid_dropout(self.c_proj(y))
 
